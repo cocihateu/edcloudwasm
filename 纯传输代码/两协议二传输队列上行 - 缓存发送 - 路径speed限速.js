@@ -276,21 +276,11 @@ const connectProxyIp = async (param, limit, txt) => {
     return concurrentConnect(host, port, limit);
 };
 const strategyExecutorMap = new Map([
-    [0, ({addrType, port, addrBytes}, _param, limit) => {
-        return concurrentConnect(binaryAddrToString(addrType, addrBytes), port, limit);
-    }],
-    [1, async ({addrType, port, addrBytes}, param, limit, _txt) => {
-        return connectViaSocksProxy(addrType, port, param, addrBytes, limit);
-    }],
-    [2, async ({addrType, port, addrBytes}, param, limit, _txt) => {
-        return connectViaHttpProxy(addrType, port, param, addrBytes, limit);
-    }],
-    [6, async ({addrType, port, addrBytes}, param, limit, _txt) => {
-        return connectViaHttpProxy(addrType, port, param, addrBytes, limit, true);
-    }],
-    [3, async (_parsedRequest, param, limit, txt) => {
-        return connectProxyIp(param, limit, txt);
-    }]
+    [0, ({addrType, port, addrBytes}, _param, limit) => concurrentConnect(binaryAddrToString(addrType, addrBytes), port, limit)],
+    [1, async ({addrType, port, addrBytes}, param, limit, _txt) => connectViaSocksProxy(addrType, port, param, addrBytes, limit)],
+    [2, async ({addrType, port, addrBytes}, param, limit, _txt) => connectViaHttpProxy(addrType, port, param, addrBytes, limit)],
+    [6, async ({addrType, port, addrBytes}, param, limit, _txt) => connectViaHttpProxy(addrType, port, param, addrBytes, limit, true)],
+    [3, async (_parsedRequest, param, limit, txt) => connectProxyIp(param, limit, txt)]
 ]);
 const concurrentStrategyExec = (parsedRequest, params, exec, limit, txt) => {
     const attempts = params.map(param => Promise.resolve().then(() => exec(parsedRequest, param, limit, txt)));
@@ -432,7 +422,7 @@ const createBufferedTcpWriter = (tcpWriter, close) => {
         if (closed) return;
         const data = chunk.constructor === Uint8Array ? chunk : new Uint8Array(chunk), len = data.byteLength;
         if (!len) return;
-        offset + len > 32768 && flush(), buffer.set(data, offset), offset += len, offset === 32768 ? flush() : (timerId && clearTimeout(timerId), timerId = setTimeout(flush, 2));
+        offset + len > 32768 && flush(), buffer.set(data, offset), offset += len, offset === 32768 ? flush() : (timerId ||= setTimeout(flush, 2));
     };
 };
 const createAsyncMicrotaskQueue = (consume, close) => {
@@ -538,7 +528,7 @@ const handleXwebPost = async (request) => {
                         request.body.pipeThrough(upBridge).pipeTo(state.tcpSocket.writable);
                         break;
                     }
-                    used > 24576 ? flush() : (timerId && clearTimeout(timerId), timerId = setTimeout(flush, 2));
+                    used > 24576 ? flush() : (timerId ||= setTimeout(flush, 2));
                 } else {
                     state.needMore = false;
                     await handleSession(bufferView.subarray(0, used), state, request, writable, close);

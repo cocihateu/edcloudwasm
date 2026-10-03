@@ -1828,34 +1828,15 @@ const connectProxyIp = async (param, limit, txt) => {
     return concurrentConnect(host, port, limit);
 };
 const strategyExecutorMap = new Map([
-    [0, ({addrType, port, addrBytes}, _param, limit) => {
-        return concurrentConnect(binaryAddrToString(addrType, addrBytes), port, limit);
-    }],
-    [1, async ({addrType, port, addrBytes}, param, limit, _txt) => {
-        return connectViaSocksProxy(addrType, port, param, addrBytes, limit);
-    }],
-    [2, async ({addrType, port, addrBytes}, param, limit, _txt) => {
-        return connectViaHttpProxy(addrType, port, param, addrBytes, limit);
-    }],
-    [6, async ({addrType, port, addrBytes}, param, limit, _txt) => {
-        return connectViaHttpProxy(addrType, port, param, addrBytes, limit, true);
-    }],
-    [3, async (_parsedRequest, param, limit, txt) => {
-        return connectProxyIp(param, limit, txt);
-    }],
-    [4, async ({addrType, port, addrBytes, isHttp}, param, limit, _txt) => {
-        const {nat64Auth, proxyAll} = param;
-        return connectNat64(addrType, port, nat64Auth, addrBytes, proxyAll, limit, isHttp);
-    }],
-    [5, async (parsedRequest, param, _limit, _txt) => {
-        return connectViaTurnProxy(param, parsedRequest);
-    }],
-    [7, async (parsedRequest, param, _limit, _txt) => {
-        return connectViaTurnProxy(param, parsedRequest, true);
-    }],
-    [8, async (parsedRequest, param, _limit, _txt) => {
-        return connectViaSstpProxy(param, parsedRequest);
-    }]
+    [0, ({addrType, port, addrBytes}, _param, limit) => concurrentConnect(binaryAddrToString(addrType, addrBytes), port, limit)],
+    [1, async ({addrType, port, addrBytes}, param, limit, _txt) => connectViaSocksProxy(addrType, port, param, addrBytes, limit)],
+    [2, async ({addrType, port, addrBytes}, param, limit, _txt) => connectViaHttpProxy(addrType, port, param, addrBytes, limit)],
+    [6, async ({addrType, port, addrBytes}, param, limit, _txt) => connectViaHttpProxy(addrType, port, param, addrBytes, limit, true)],
+    [3, async (_parsedRequest, param, limit, txt) => connectProxyIp(param, limit, txt)],
+    [4, async ({addrType, port, addrBytes, isHttp}, param, limit, _txt) => connectNat64(addrType, port, param.nat64Auth, addrBytes, param.proxyAll, limit, isHttp)],
+    [5, async (parsedRequest, param, _limit, _txt) => connectViaTurnProxy(param, parsedRequest)],
+    [7, async (parsedRequest, param, _limit, _txt) => connectViaTurnProxy(param, parsedRequest, true)],
+    [8, async (parsedRequest, param, _limit, _txt) => connectViaSstpProxy(param, parsedRequest)]
 ]);
 const concurrentStrategyExec = (parsedRequest, params, exec, limit, txt) => {
     const attempts = params.map(param => Promise.resolve().then(() => exec(parsedRequest, param, limit, txt)));
@@ -2005,7 +1986,7 @@ const createBufferedTcpWriter = (tcpWriter, close) => {
         if (closed) return;
         const data = chunk.constructor === Uint8Array ? chunk : new Uint8Array(chunk), len = data.byteLength;
         if (!len) return;
-        offset + len > 32768 && flush(), buffer.set(data, offset), offset += len, offset === 32768 ? flush() : (timerId && clearTimeout(timerId), timerId = setTimeout(flush, 2));
+        offset + len > 32768 && flush(), buffer.set(data, offset), offset += len, offset === 32768 ? flush() : (timerId ||= setTimeout(flush, 2));
     };
 };
 const createAsyncMicrotaskQueue = (consume, close) => {
@@ -2162,7 +2143,7 @@ const handleXwebPost = async (request) => {
                         request.body.pipeThrough(upBridge).pipeTo(state.tcpSocket.writable);
                         break;
                     }
-                    used > 24576 ? flush() : (timerId && clearTimeout(timerId), timerId = setTimeout(flush, 2));
+                    used > 24576 ? flush() : (timerId ||= setTimeout(flush, 2));
                 } else {
                     state.needMore = false;
                     await handleSession(bufferView.subarray(0, used), state, request, writable, close);
